@@ -1,0 +1,20 @@
+[
+  {
+    "id": "sample-twitter-agents",
+    "platform": "twitter",
+    "title": "Agent design notes for practical tool use",
+    "url": "https://example.com/recollect-sample/agent-design",
+    "author": "ReCollect sample",
+    "rawContent": "A practical set of notes on agent design: begin with one narrow task, define the tool boundary, record each action, and make failure states visible. Use small evaluations before adding more tools or autonomy.",
+    "themeTags": ["ai", "agents"]
+  },
+  {
+    "id": "sample-reddit-evaluation",
+    "platform": "reddit",
+    "title": "How to evaluate a small AI workflow",
+    "url": "https://example.com/recollect-sample/evaluation",
+    "author": "r/AI_Agents",
+    "rawContent": "A lightweight evaluation plan for an AI workflow: write down ten representative tasks, define what a correct answer looks like, run the same set after each change, and inspect failures rather than relying on a single impressive example.",
+    "themeTags": ["ai", "evaluation"]
+  }
+]
