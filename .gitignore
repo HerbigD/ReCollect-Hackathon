@@ -78,6 +78,12 @@ web_modules/
 .next
 out
 
+# Local ReCollect runtime data
+data/*.db
+data/*.db-shm
+data/*.db-wal
+.DS_Store
+
 # Nuxt.js build / generate output
 .nuxt
 dist
