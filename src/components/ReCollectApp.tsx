@@ -74,11 +74,11 @@ export function ReCollectApp({ items }: { items: CollectionPreview[] }) {
         body: JSON.stringify({ topic: cleanTopic, k: 12, outputLanguage: "English" }),
       });
       const payload = await response.json() as TransformResponse & { error?: string };
-      if (!response.ok) throw new Error(payload.error || "Could not build this Study Path.");
+      if (!response.ok) throw new Error(payload.error || "Could not build this result.");
       setOutput(payload);
       window.setTimeout(() => outputRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
-    } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Something went wrong.");
+    } catch {
+      setError("We couldn’t build this result right now. Your saves are still here — please try again.");
     } finally {
       setLoading(false);
     }
@@ -123,24 +123,20 @@ export function ReCollectApp({ items }: { items: CollectionPreview[] }) {
         </header>
 
         <section className="mx-auto max-w-5xl pb-14 pt-16 text-center sm:pb-20 sm:pt-24">
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm">
-            <span className="size-2 rounded-full bg-rose-400" />
-            {items.length} things saved. Zero plans made.
-          </div>
-          <h1 className="mx-auto mt-6 max-w-4xl text-5xl font-black leading-[0.94] tracking-[-0.065em] sm:text-7xl lg:text-[5.8rem]">
+          <h1 className="mx-auto max-w-4xl text-5xl font-black leading-[0.94] tracking-[-0.065em] sm:text-7xl lg:text-[5.8rem]">
             Your saves deserve a <span className="text-emerald-700">second life.</span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
-            Tell ReCollect what you want to learn. It melts the scattered posts you already saved into one grounded, source-linked Study Path.
+            Tell ReCollect a topic. It melts the scattered posts you already saved into one grounded, source-linked result.
           </p>
 
           <form onSubmit={generate} className="mx-auto mt-9 max-w-3xl rounded-[1.6rem] border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-300/50 sm:flex sm:rounded-full">
-            <label className="sr-only" htmlFor="topic">What do you want to learn?</label>
+            <label className="sr-only" htmlFor="topic">Enter a topic</label>
             <input
               id="topic"
               value={topic}
               onChange={(event) => setTopic(event.target.value)}
-              placeholder="What do you want to learn? Try “AI agents”"
+              placeholder="Enter a topic — try “AI agents”"
               className="h-14 w-full rounded-full bg-transparent px-5 text-base font-medium outline-none placeholder:text-slate-400 sm:h-16 sm:text-lg"
             />
             <button
@@ -148,7 +144,7 @@ export function ReCollectApp({ items }: { items: CollectionPreview[] }) {
               disabled={!topic.trim() || loading}
               className="mt-2 h-14 w-full shrink-0 rounded-full bg-slate-950 px-7 text-sm font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:mt-0 sm:h-16 sm:w-auto sm:text-base"
             >
-              {loading ? "Melting saves…" : "Build my Study Path →"}
+              {loading ? "Building…" : "Build it →"}
             </button>
           </form>
           <div className="mt-4 flex flex-wrap justify-center gap-2 text-xs text-slate-500">
@@ -162,24 +158,31 @@ export function ReCollectApp({ items }: { items: CollectionPreview[] }) {
           {error && <p role="alert" className="mx-auto mt-5 max-w-xl rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{error}</p>}
         </section>
 
-        {loading && (
-          <section className="mx-auto mb-16 max-w-4xl rounded-[2rem] border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/60">
-            <div className="flex items-center gap-4">
-              <span className="grid size-12 place-items-center rounded-full bg-emerald-100 text-xl motion-safe:animate-pulse">✦</span>
-              <div>
-                <p className="font-black">Finding the closest saves…</p>
-                <p className="mt-1 text-sm text-slate-500">Retrieving by meaning, then shaping a grounded path in English.</p>
+        <div ref={outputRef} className="scroll-mt-5 pb-20" aria-live="polite">
+          {loading ? (
+            <section className="mx-auto max-w-5xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/60 sm:p-9">
+              <div className="flex items-center gap-4">
+                <span className="grid size-12 shrink-0 place-items-center rounded-full bg-emerald-100 text-xl text-emerald-800 motion-safe:animate-spin">✦</span>
+                <div>
+                  <p className="font-black">Reading your saves and building your result…</p>
+                  <p className="mt-1 text-sm text-slate-500">Finding the closest sources, then shaping them into the format that fits.</p>
+                </div>
               </div>
-            </div>
-            <div className="mt-6 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full w-2/3 rounded-full bg-emerald-400 motion-safe:animate-pulse" /></div>
-          </section>
-        )}
-
-        {output && (
-          <div ref={outputRef} className="scroll-mt-5 pb-20">
+              <div className="mt-8 space-y-4 motion-safe:animate-pulse" aria-hidden="true">
+                <div className="h-3 w-28 rounded-full bg-emerald-100" />
+                <div className="h-9 w-3/4 rounded-xl bg-slate-200" />
+                <div className="h-4 w-full rounded-full bg-slate-100" />
+                <div className="h-4 w-5/6 rounded-full bg-slate-100" />
+                <div className="grid gap-4 pt-3 sm:grid-cols-2">
+                  <div className="h-32 rounded-2xl bg-slate-100" />
+                  <div className="h-32 rounded-2xl bg-slate-100" />
+                </div>
+              </div>
+            </section>
+          ) : output ? (
             <OutputPanel data={output} totalSaves={items.length} />
-          </div>
-        )}
+          ) : null}
+        </div>
 
         <section className="pb-24">
           <div className="mb-8 flex flex-col gap-5 border-t border-slate-900/10 pt-9 sm:flex-row sm:items-end sm:justify-between">

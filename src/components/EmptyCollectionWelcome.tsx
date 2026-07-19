@@ -37,7 +37,7 @@ export function EmptyCollectionWelcome({
               Turn the saves you never revisit into something you’ll <span className="text-emerald-700">actually use.</span>
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
-              Connect X and Reddit once. ReCollect gathers the ideas you saved, then melts them into grounded, source-linked Study Paths.
+              Connect X and Reddit once. ReCollect gathers the ideas you saved, then melts them into grounded, source-linked results.
             </p>
 
             <div className="mt-7">
@@ -97,11 +97,11 @@ export function EmptyCollectionWelcome({
 
               <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-5">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="font-black">Your finished Study Path</p>
+                  <p className="font-black">Your finished result</p>
                   <span className="rounded-full bg-emerald-300 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-emerald-950">Ready to use</span>
                 </div>
                 <div className="mt-5 space-y-3">
-                  {["Start with the foundations", "Build a reliable workflow", "Put it into practice"].map((label, index) => (
+                  {["Find the strongest connections", "Shape them into useful groups", "Revisit what matters"].map((label, index) => (
                     <div key={label} className="flex items-center gap-3 rounded-xl bg-slate-950/35 p-3 text-xs font-bold text-slate-200">
                       <span className="grid size-6 shrink-0 place-items-center rounded-full border border-emerald-300/30 text-[10px] text-emerald-300">{index + 1}</span>
                       {label}

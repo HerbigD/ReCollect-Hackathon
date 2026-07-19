@@ -27,6 +27,7 @@ function toMarkdown(data: TransformResponse) {
 
 export function OutputPanel({ data, totalSaves }: { data: TransformResponse; totalSaves: number }) {
   const [copied, setCopied] = useState(false);
+  const formatLabel = (data.result.format?.trim() || "COLLECTION").toUpperCase();
   const platformByUrl = useMemo(() => new Map(data.retrieved.map((item) => [item.url, item.platform])), [data.retrieved]);
   const usedSourceCount = useMemo(() => new Set(data.result.sections.flatMap((section) => section.items.map((item) => item.sourceUrl))).size, [data.result.sections]);
 
@@ -41,7 +42,7 @@ export function OutputPanel({ data, totalSaves }: { data: TransformResponse; tot
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `recollect-${data.topic.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "study-path"}.md`;
+    anchor.download = `recollect-${data.topic.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "collection"}.md`;
     anchor.click();
     URL.revokeObjectURL(url);
   }
@@ -56,7 +57,7 @@ export function OutputPanel({ data, totalSaves }: { data: TransformResponse; tot
           <div>
             <div className="flex items-center gap-3 text-xs font-bold uppercase tracking-[0.2em] text-emerald-300">
               <span className="grid size-7 place-items-center rounded-full bg-emerald-300 text-sm text-slate-950">★</span>
-              Finished Study Path
+              {formatLabel}
             </div>
             <h2 className="mt-6 max-w-3xl text-3xl font-black leading-tight tracking-[-0.04em] sm:text-5xl">{data.result.title}</h2>
             {data.result.summary && <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300 sm:text-lg">{data.result.summary}</p>}
