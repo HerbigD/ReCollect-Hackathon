@@ -1,8 +1,9 @@
 import sampleSavedItems from "../../../../data/sampleSavedItems.json";
 import { collectRedditSaved } from "@/collectors/openCliReddit";
 import { collectTwitterBookmarks } from "@/collectors/openCliTwitter";
-import { upsertSavedItems } from "@/db/sqlite";
+import { getAllSavedItems, upsertSavedItems } from "@/db/sqlite";
 import { completeContent } from "@/pipeline/completeContent";
+import { normalizeSavedItems } from "@/pipeline/normalize";
 import type { SavedItem } from "@/types";
 
 export const runtime = "nodejs";
@@ -28,13 +29,16 @@ export async function POST() {
   ];
   const usingFallback = collectedItems.length === 0;
   const itemsToProcess: SavedItem[] = usingFallback ? sampleSavedItems as SavedItem[] : collectedItems;
-  const completion = await completeContent(itemsToProcess);
-  const database = upsertSavedItems(completion.items);
+  const normalizedItems = normalizeSavedItems(itemsToProcess);
+  const completion = await completeContent(normalizedItems);
+  const completedItems = normalizeSavedItems(completion.items);
+  const database = upsertSavedItems(completedItems);
+  const storedItems = getAllSavedItems();
 
   return Response.json({
     source: usingFallback ? "sample-fallback" : "opencli",
-    collected: itemsToProcess.length,
-    byPlatform: completion.items.reduce<Record<string, number>>((counts, item) => {
+    collected: completedItems.length,
+    byPlatform: completedItems.reduce<Record<string, number>>((counts, item) => {
       counts[item.platform] = (counts[item.platform] ?? 0) + 1;
       return counts;
     }, {}),
@@ -43,7 +47,15 @@ export async function POST() {
     updated: database.updated,
     errors: [...collectorErrors, ...completion.errors],
     fallbacks: completion.fallbacks,
-    items: completion.items.map((item) => ({
+    database: {
+      total: storedItems.length,
+      byPlatform: storedItems.reduce<Record<string, number>>((counts, item) => {
+        counts[item.platform] = (counts[item.platform] ?? 0) + 1;
+        return counts;
+      }, {}),
+      emptyRawContent: storedItems.filter((item) => !item.rawContent.trim()).length,
+    },
+    items: completedItems.map((item) => ({
       id: item.id,
       platform: item.platform,
       title: item.title,

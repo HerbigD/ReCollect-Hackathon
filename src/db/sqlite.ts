@@ -70,3 +70,35 @@ export function upsertSavedItems(items: SavedItem[]) {
   saveAll(items);
   return { inserted, updated };
 }
+
+export function getAllSavedItems(): SavedItem[] {
+  const rows = getDatabase().prepare(`
+    SELECT id, platform, title, url, author, thumbnail, saved_at, raw_content, theme_tags, embedding
+    FROM saved_items
+    ORDER BY created_at DESC
+  `).all() as Array<{
+    id: string;
+    platform: SavedItem["platform"];
+    title: string;
+    url: string;
+    author: string | null;
+    thumbnail: string | null;
+    saved_at: string | null;
+    raw_content: string;
+    theme_tags: string;
+    embedding: string | null;
+  }>;
+
+  return rows.map((row) => ({
+    id: row.id,
+    platform: row.platform,
+    title: row.title,
+    url: row.url,
+    author: row.author ?? undefined,
+    thumbnail: row.thumbnail ?? undefined,
+    savedAt: row.saved_at ?? undefined,
+    rawContent: row.raw_content,
+    themeTags: JSON.parse(row.theme_tags) as string[],
+    embedding: row.embedding ? JSON.parse(row.embedding) as number[] : undefined,
+  }));
+}
