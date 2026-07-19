@@ -19,7 +19,7 @@ function titleFromText(text: string) {
 }
 
 /** Collect the logged-in user's X bookmarks through OpenCLI. */
-export async function collectTwitterBookmarks(limit = 100): Promise<SavedItem[]> {
+export async function collectTwitterBookmarks(limit = 200): Promise<SavedItem[]> {
   const { stdout } = await execFileAsync(
     "opencli",
     ["twitter", "bookmarks", "-f", "json", "--limit", String(limit)],

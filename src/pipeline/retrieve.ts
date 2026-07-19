@@ -1,5 +1,5 @@
 import { embedTexts } from "@/ai/embeddings";
-import { getAllSavedItems, upsertSavedItems } from "@/db/sqlite";
+import { getAllSavedItems, updateSavedItemEmbeddings } from "@/db/sqlite";
 import { embedMissingItems } from "@/pipeline/embed";
 import type { SavedItem } from "@/types";
 
@@ -30,7 +30,7 @@ export async function retrieve(topic: string, k = 12): Promise<RetrievedItem[]> 
 
   const storedItems = getAllSavedItems().filter((item) => item.rawContent.trim());
   const embedded = await embedMissingItems(storedItems);
-  if (embedded.embedded.length) upsertSavedItems(embedded.embedded);
+  if (embedded.embedded.length) updateSavedItemEmbeddings(embedded.embedded);
 
   const [queryEmbedding] = await embedTexts([query]);
   return embedded.items

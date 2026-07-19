@@ -5,6 +5,20 @@ import type { SavedItem } from "@/types";
 
 const globalForDatabase = globalThis as unknown as { recollectDatabase?: Database.Database };
 
+interface SavedItemRow {
+  id: string;
+  platform: SavedItem["platform"];
+  title: string;
+  url: string;
+  author: string | null;
+  thumbnail: string | null;
+  saved_at: string | null;
+  raw_content: string;
+  theme_tags: string;
+  embedding: string | null;
+  removed_at: string | null;
+}
+
 function databasePath() {
   const fileName = process.env.DATABASE_PATH || "recollect.db";
   if (path.basename(fileName) !== fileName) {
@@ -14,8 +28,21 @@ function databasePath() {
   return path.join(process.cwd(), "data", fileName);
 }
 
+function ensureSchema(database: Database.Database) {
+  database.exec(readFileSync(path.join(process.cwd(), "src", "db", "schema.sql"), "utf8"));
+
+  const columns = database.pragma("table_info(saved_items)") as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === "removed_at")) {
+    database.exec("ALTER TABLE saved_items ADD COLUMN removed_at TEXT");
+  }
+  database.exec("CREATE INDEX IF NOT EXISTS idx_saved_items_active_platform ON saved_items(removed_at, platform)");
+}
+
 export function getDatabase() {
-  if (globalForDatabase.recollectDatabase) return globalForDatabase.recollectDatabase;
+  if (globalForDatabase.recollectDatabase) {
+    ensureSchema(globalForDatabase.recollectDatabase);
+    return globalForDatabase.recollectDatabase;
+  }
 
   const filePath = databasePath();
   mkdirSync(path.dirname(filePath), { recursive: true });
@@ -23,20 +50,19 @@ export function getDatabase() {
   const database = new Database(filePath);
   database.pragma("journal_mode = WAL");
   database.pragma("foreign_keys = ON");
-  database.exec(readFileSync(path.join(process.cwd(), "src", "db", "schema.sql"), "utf8"));
+  ensureSchema(database);
 
   globalForDatabase.recollectDatabase = database;
   return database;
 }
 
-export function upsertSavedItems(items: SavedItem[]) {
-  const database = getDatabase();
+function writeSavedItems(database: Database.Database, items: SavedItem[], reactivate: boolean) {
   const existingUrl = database.prepare("SELECT 1 FROM saved_items WHERE url = ?");
   const upsert = database.prepare(`
     INSERT INTO saved_items (
-      id, platform, title, url, author, thumbnail, saved_at, raw_content, theme_tags, embedding
+      id, platform, title, url, author, thumbnail, saved_at, raw_content, theme_tags, embedding, removed_at
     ) VALUES (
-      @id, @platform, @title, @url, @author, @thumbnail, @savedAt, @rawContent, @themeTags, @embedding
+      @id, @platform, @title, @url, @author, @thumbnail, @savedAt, @rawContent, @themeTags, @embedding, NULL
     ) ON CONFLICT(url) DO UPDATE SET
       id = excluded.id,
       platform = excluded.platform,
@@ -44,50 +70,104 @@ export function upsertSavedItems(items: SavedItem[]) {
       author = excluded.author,
       thumbnail = excluded.thumbnail,
       saved_at = excluded.saved_at,
-      raw_content = excluded.raw_content,
-      theme_tags = excluded.theme_tags,
-      embedding = excluded.embedding,
+      raw_content = CASE
+        WHEN length(excluded.raw_content) > 0 THEN excluded.raw_content
+        ELSE saved_items.raw_content
+      END,
+      theme_tags = CASE
+        WHEN excluded.theme_tags <> '[]' THEN excluded.theme_tags
+        ELSE saved_items.theme_tags
+      END,
+      embedding = CASE
+        WHEN saved_items.title IS NOT excluded.title
+          OR saved_items.author IS NOT excluded.author
+          OR (length(excluded.raw_content) > 0 AND saved_items.raw_content IS NOT excluded.raw_content)
+          THEN excluded.embedding
+        ELSE COALESCE(excluded.embedding, saved_items.embedding)
+      END,
+      removed_at = CASE WHEN @reactivate = 1 THEN NULL ELSE saved_items.removed_at END,
       updated_at = CURRENT_TIMESTAMP
   `);
 
   let inserted = 0;
   let updated = 0;
-  const saveAll = database.transaction((savedItems: SavedItem[]) => {
-    for (const item of savedItems) {
-      if (existingUrl.get(item.url)) updated += 1;
-      else inserted += 1;
-      upsert.run({
-        ...item,
-        author: item.author ?? null,
-        thumbnail: item.thumbnail ?? null,
-        savedAt: item.savedAt ?? null,
-        themeTags: JSON.stringify(item.themeTags),
-        embedding: item.embedding ? JSON.stringify(item.embedding) : null,
-      });
-    }
-  });
+  for (const item of items) {
+    if (existingUrl.get(item.url)) updated += 1;
+    else inserted += 1;
+    upsert.run({
+      ...item,
+      author: item.author ?? null,
+      thumbnail: item.thumbnail ?? null,
+      savedAt: item.savedAt ?? null,
+      themeTags: JSON.stringify(item.themeTags),
+      embedding: item.embedding ? JSON.stringify(item.embedding) : null,
+      reactivate: reactivate ? 1 : 0,
+    });
+  }
 
-  saveAll(items);
   return { inserted, updated };
 }
 
-export function getAllSavedItems(): SavedItem[] {
+export function upsertSavedItems(items: SavedItem[]) {
+  const database = getDatabase();
+  const saveAll = database.transaction((savedItems: SavedItem[]) => writeSavedItems(database, savedItems, false));
+
+  return saveAll(items);
+}
+
+export function syncSavedItemsForPlatform(platform: SavedItem["platform"], items: SavedItem[]) {
+  if (items.some((item) => item.platform !== platform)) {
+    throw new Error(`Cannot reconcile ${platform} with items from another platform.`);
+  }
+  if (!items.length) return { inserted: 0, updated: 0, removed: 0 };
+
+  const database = getDatabase();
+  return database.transaction(() => {
+    const upserted = writeSavedItems(database, items, true);
+    const placeholders = items.map(() => "?").join(", ");
+
+    // Reconciliation assumes `--limit 200` covers the platform's complete saved set.
+    // This function must never be called for an empty or failed pull, or it could
+    // incorrectly soft-delete every saved item for that platform.
+    const removal = database.prepare(`
+      UPDATE saved_items
+      SET removed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+      WHERE platform = ?
+        AND removed_at IS NULL
+        AND url NOT IN (${placeholders})
+    `).run(platform, ...items.map((item) => item.url));
+
+    return { ...upserted, removed: removal.changes };
+  })();
+}
+
+export function updateSavedItemEmbeddings(items: SavedItem[]) {
+  const database = getDatabase();
+  const update = database.prepare(`
+    UPDATE saved_items
+    SET embedding = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE url = ?
+  `);
+  const updateAll = database.transaction((savedItems: SavedItem[]) => {
+    let updated = 0;
+    for (const item of savedItems) {
+      if (!item.embedding?.length) continue;
+      updated += update.run(JSON.stringify(item.embedding), item.url).changes;
+    }
+    return updated;
+  });
+
+  return updateAll(items);
+}
+
+export function getAllSavedItems(options: { includeRemoved?: boolean } = {}): SavedItem[] {
+  const activeFilter = options.includeRemoved ? "" : "WHERE removed_at IS NULL";
   const rows = getDatabase().prepare(`
-    SELECT id, platform, title, url, author, thumbnail, saved_at, raw_content, theme_tags, embedding
+    SELECT id, platform, title, url, author, thumbnail, saved_at, raw_content, theme_tags, embedding, removed_at
     FROM saved_items
+    ${activeFilter}
     ORDER BY created_at DESC
-  `).all() as Array<{
-    id: string;
-    platform: SavedItem["platform"];
-    title: string;
-    url: string;
-    author: string | null;
-    thumbnail: string | null;
-    saved_at: string | null;
-    raw_content: string;
-    theme_tags: string;
-    embedding: string | null;
-  }>;
+  `).all() as SavedItemRow[];
 
   return rows.map((row) => ({
     id: row.id,
@@ -100,5 +180,6 @@ export function getAllSavedItems(): SavedItem[] {
     rawContent: row.raw_content,
     themeTags: JSON.parse(row.theme_tags) as string[],
     embedding: row.embedding ? JSON.parse(row.embedding) as number[] : undefined,
+    removedAt: row.removed_at ?? undefined,
   }));
 }

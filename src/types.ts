@@ -11,6 +11,7 @@ export interface SavedItem {
   rawContent: string;
   themeTags: string[];
   embedding?: number[];
+  removedAt?: string;
 }
 
 export interface TransformResult {

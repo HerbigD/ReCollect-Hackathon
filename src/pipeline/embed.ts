@@ -6,7 +6,7 @@ function embeddingInput(item: SavedItem) {
 }
 
 export async function embedMissingItems(items: SavedItem[]) {
-  const missing = items.filter((item) => !item.embedding?.length && item.rawContent.trim());
+  const missing = items.filter((item) => !item.embedding?.length && embeddingInput(item).trim());
   if (!missing.length) return { items, embedded: [] as SavedItem[] };
 
   const vectors = await embedTexts(missing.map(embeddingInput));

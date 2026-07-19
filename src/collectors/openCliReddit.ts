@@ -16,7 +16,7 @@ function idFromRedditUrl(url: string) {
 }
 
 /** Collect the logged-in user's saved Reddit posts through OpenCLI. */
-export async function collectRedditSaved(limit = 100): Promise<SavedItem[]> {
+export async function collectRedditSaved(limit = 200): Promise<SavedItem[]> {
   const { stdout } = await execFileAsync(
     "opencli",
     ["reddit", "saved", "-f", "json", "--limit", String(limit)],

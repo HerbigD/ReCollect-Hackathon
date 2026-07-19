@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS saved_items (
   raw_content TEXT NOT NULL,
   theme_tags TEXT NOT NULL DEFAULT '[]',
   embedding TEXT,
+  removed_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
