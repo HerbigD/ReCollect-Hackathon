@@ -59,6 +59,14 @@ async function prepareItems(items: SavedItem[]) {
   };
 }
 
+function reuseExistingRedditContent(items: SavedItem[], existingByUrl: Map<string, SavedItem>) {
+  return items.map((item) => {
+    const existing = existingByUrl.get(item.url);
+    if (item.platform !== "reddit" || item.rawContent.trim() || !existing?.rawContent.trim()) return item;
+    return { ...item, rawContent: existing.rawContent };
+  });
+}
+
 /** Pull both platforms independently so one failure can never erase the other's state. */
 export async function syncSavedItems(): Promise<SyncSummary> {
   const pulls = await Promise.allSettled([
@@ -67,6 +75,7 @@ export async function syncSavedItems(): Promise<SyncSummary> {
   ]);
 
   const platforms = {} as Record<SyncPlatform, PlatformSyncReport>;
+  const existingByUrl = new Map(getAllSavedItems({ includeRemoved: true }).map((item) => [item.url, item]));
   const errors: string[] = [];
   let added = 0;
   let updated = 0;
@@ -90,7 +99,7 @@ export async function syncSavedItems(): Promise<SyncSummary> {
       continue;
     }
 
-    const prepared = await prepareItems(pull.value);
+    const prepared = await prepareItems(reuseExistingRedditContent(pull.value, existingByUrl));
     const database = syncSavedItemsForPlatform(platform as Platform, prepared.items);
     const platformErrors = prepared.completion.errors.map((error) => `${platform}: ${error}`);
     errors.push(...platformErrors);

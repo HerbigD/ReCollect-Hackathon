@@ -4,7 +4,10 @@ import { promisify } from "node:util";
 
 const MINIMUM_USABLE_CONTENT_LENGTH = 160;
 const MAX_COMMENTS = 3;
+const OPENCLI_READ_TIMEOUT_MS = 15_000;
 const execFileAsync = promisify(execFile);
+
+class OpenCliRedditFallbackError extends Error {}
 
 interface RedditThing {
   kind: string;
@@ -79,7 +82,7 @@ async function completeRedditFromOpenCli(item: SavedItem): Promise<SavedItem> {
   const { stdout } = await execFileAsync(
     "opencli",
     ["reddit", "read", redditPostId(item.url), "-f", "json"],
-    { maxBuffer: 10 * 1024 * 1024 },
+    { maxBuffer: 10 * 1024 * 1024, timeout: OPENCLI_READ_TIMEOUT_MS },
   );
   const entries = JSON.parse(stdout) as OpenCliRedditReadEntry[];
   if (!Array.isArray(entries)) throw new Error("OpenCLI Reddit read output was not a JSON array.");
@@ -94,16 +97,20 @@ async function completeRedditFromOpenCli(item: SavedItem): Promise<SavedItem> {
   return { ...item, rawContent: contentFromParts(post, comments) };
 }
 
-async function completeRedditPost(item: SavedItem) {
+async function completeRedditPost(item: SavedItem, allowOpenCliFallback: boolean) {
   try {
     return { item: await completeRedditFromJson(item), usedOpenCliFallback: false };
   } catch (jsonError) {
+    const jsonMessage = jsonError instanceof Error ? jsonError.message : String(jsonError);
+    if (!allowOpenCliFallback) {
+      throw new Error(`Reddit .json failed (${jsonMessage}); OpenCLI fallback was skipped after an earlier failure in this sync.`);
+    }
+
     try {
       return { item: await completeRedditFromOpenCli(item), usedOpenCliFallback: true };
     } catch (openCliError) {
-      const jsonMessage = jsonError instanceof Error ? jsonError.message : String(jsonError);
       const openCliMessage = openCliError instanceof Error ? openCliError.message : String(openCliError);
-      throw new Error(`Reddit .json failed (${jsonMessage}); OpenCLI fallback failed (${openCliMessage})`);
+      throw new OpenCliRedditFallbackError(`Reddit .json failed (${jsonMessage}); OpenCLI fallback failed (${openCliMessage})`);
     }
   }
 }
@@ -116,6 +123,7 @@ export async function completeContent(items: SavedItem[]): Promise<ContentComple
   const errors: string[] = [];
   const fallbacks: string[] = [];
   let completed = 0;
+  let allowOpenCliFallback = true;
 
   const enrichedItems: SavedItem[] = [];
   for (const item of items) {
@@ -125,14 +133,18 @@ export async function completeContent(items: SavedItem[]): Promise<ContentComple
     }
 
     try {
-      const enriched = await completeRedditPost(item);
+      const enriched = await completeRedditPost(item, allowOpenCliFallback);
       completed += 1;
       if (enriched.usedOpenCliFallback) fallbacks.push(`${item.url}: OpenCLI fallback after Reddit .json was unavailable.`);
       enrichedItems.push(enriched.item);
     } catch (error) {
+      if (error instanceof OpenCliRedditFallbackError) allowOpenCliFallback = false;
       const message = error instanceof Error ? error.message : String(error);
       errors.push(`${item.url}: ${message}`);
-      enrichedItems.push(item);
+      // Keep sync usable during Reddit blocks without inventing content. The
+      // saved post title is real source data and also gives embedding a stable,
+      // non-empty input until a later sync can retrieve the full body.
+      enrichedItems.push({ ...item, rawContent: item.rawContent.trim() || item.title.trim() });
     }
   }
 

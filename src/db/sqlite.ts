@@ -57,14 +57,14 @@ export function getDatabase() {
 }
 
 function writeSavedItems(database: Database.Database, items: SavedItem[], reactivate: boolean) {
-  const existingUrl = database.prepare("SELECT 1 FROM saved_items WHERE url = ?");
+  const existingUrl = database.prepare("SELECT id FROM saved_items WHERE url = ?");
+  const existingId = database.prepare("SELECT url FROM saved_items WHERE id = ?");
   const upsert = database.prepare(`
     INSERT INTO saved_items (
       id, platform, title, url, author, thumbnail, saved_at, raw_content, theme_tags, embedding, removed_at
     ) VALUES (
       @id, @platform, @title, @url, @author, @thumbnail, @savedAt, @rawContent, @themeTags, @embedding, NULL
     ) ON CONFLICT(url) DO UPDATE SET
-      id = excluded.id,
       platform = excluded.platform,
       title = excluded.title,
       author = excluded.author,
@@ -92,10 +92,30 @@ function writeSavedItems(database: Database.Database, items: SavedItem[], reacti
   let inserted = 0;
   let updated = 0;
   for (const item of items) {
-    if (existingUrl.get(item.url)) updated += 1;
-    else inserted += 1;
+    const urlMatch = existingUrl.get(item.url) as { id: string } | undefined;
+    let storageId = urlMatch?.id ?? item.id;
+
+    if (urlMatch) {
+      updated += 1;
+    } else {
+      inserted += 1;
+      let collisionIndex = 0;
+      let idMatch = existingId.get(storageId) as { url: string } | undefined;
+
+      // URL is the sync identity. Source IDs can collide across platforms or
+      // after a provider changes a canonical URL, so never overwrite the row
+      // that already owns an ID. Use a deterministic URL-based storage ID for
+      // the new row instead; subsequent syncs find it by URL and preserve it.
+      while (idMatch && idMatch.url !== item.url) {
+        collisionIndex += 1;
+        storageId = `${item.platform}:${item.url}${collisionIndex > 1 ? `:${collisionIndex}` : ""}`;
+        idMatch = existingId.get(storageId) as { url: string } | undefined;
+      }
+    }
+
     upsert.run({
       ...item,
+      id: storageId,
       author: item.author ?? null,
       thumbnail: item.thumbnail ?? null,
       savedAt: item.savedAt ?? null,
