@@ -1,20 +1,62 @@
 "use client";
 
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CollectionCard } from "@/components/CollectionCard";
 import { OutputPanel } from "@/components/OutputPanel";
-import type { CollectionPreview, TransformResponse } from "@/components/uiTypes";
+import type { CollectionPreview, SyncResponse, TransformResponse } from "@/components/uiTypes";
 
 const suggestions = ["AI agents", "gin & cocktails", "tennis"];
 
 export function ReCollectApp({ items }: { items: CollectionPreview[] }) {
+  const router = useRouter();
   const [topic, setTopic] = useState("");
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncToast, setSyncToast] = useState<{ kind: "success" | "error"; message: string }>();
   const [error, setError] = useState<string>();
   const [output, setOutput] = useState<TransformResponse>();
   const outputRef = useRef<HTMLDivElement>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const xCount = items.filter((item) => item.platform === "twitter").length;
   const redditCount = items.filter((item) => item.platform === "reddit").length;
+
+  useEffect(() => () => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+  }, []);
+
+  function showSyncToast(toast: { kind: "success" | "error"; message: string }) {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setSyncToast(toast);
+    toastTimerRef.current = setTimeout(() => setSyncToast(undefined), 5_000);
+  }
+
+  async function syncSaves() {
+    if (syncing) return;
+    setSyncing(true);
+
+    try {
+      const response = await fetch("/api/collect", { method: "POST" });
+      const payload = await response.json().catch(() => ({})) as Partial<SyncResponse> & { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Sync request failed.");
+      if (![payload.added, payload.removed, payload.total].every((value) => typeof value === "number")) {
+        throw new Error("Sync returned an unexpected response.");
+      }
+
+      router.refresh();
+      showSyncToast({
+        kind: "success",
+        message: `+${payload.added} new · ${payload.removed} removed`,
+      });
+    } catch {
+      showSyncToast({
+        kind: "error",
+        message: "Sync couldn’t finish. Your existing saves are safe — please try again.",
+      });
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   async function generate(event?: FormEvent) {
     event?.preventDefault();
@@ -48,11 +90,23 @@ export function ReCollectApp({ items }: { items: CollectionPreview[] }) {
             <span className="grid size-8 place-items-center rounded-xl bg-slate-950 text-sm text-emerald-300">R</span>
             ReCollect
           </a>
-          <div className="hidden items-center gap-2 text-xs font-bold text-slate-500 sm:flex">
-            <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">{xCount} from X</span>
-            <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">{redditCount} from Reddit</span>
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+            <div className="hidden items-center gap-2 sm:flex">
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">X · {xCount}</span>
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">Reddit · {redditCount}</span>
+            </div>
+            <span className="mr-1 tabular-nums sm:hidden">{items.length} saves</span>
+            <button
+              type="button"
+              onClick={syncSaves}
+              disabled={syncing}
+              aria-label={syncing ? "Syncing saved items" : "Sync saved items"}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 font-black text-slate-700 shadow-sm transition hover:border-emerald-400 hover:text-emerald-700 disabled:cursor-wait disabled:border-slate-200 disabled:text-slate-400"
+            >
+              <span className={syncing ? "motion-safe:animate-spin" : ""}>↻</span>
+              {syncing ? "Syncing…" : "Sync"}
+            </button>
           </div>
-          <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500 sm:hidden">{items.length} saves</span>
         </header>
 
         <section className="mx-auto max-w-5xl pb-14 pt-16 text-center sm:pb-20 sm:pt-24">
@@ -132,6 +186,31 @@ export function ReCollectApp({ items }: { items: CollectionPreview[] }) {
           </div>
         </section>
       </div>
+
+      {syncToast && (
+        <div
+          role={syncToast.kind === "error" ? "alert" : "status"}
+          aria-live="polite"
+          className={`fixed right-4 top-4 z-50 flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-2xl border px-4 py-3 text-sm font-bold shadow-2xl backdrop-blur sm:right-8 sm:top-6 ${
+            syncToast.kind === "success"
+              ? "border-emerald-200 bg-emerald-950/95 text-emerald-50 shadow-emerald-950/20"
+              : "border-rose-200 bg-rose-950/95 text-rose-50 shadow-rose-950/20"
+          }`}
+        >
+          <span className={`grid size-6 shrink-0 place-items-center rounded-full text-xs ${syncToast.kind === "success" ? "bg-emerald-400 text-emerald-950" : "bg-rose-400 text-rose-950"}`}>
+            {syncToast.kind === "success" ? "✓" : "!"}
+          </span>
+          <span>{syncToast.message}</span>
+          <button
+            type="button"
+            onClick={() => setSyncToast(undefined)}
+            aria-label="Dismiss notification"
+            className="ml-1 text-lg leading-none opacity-60 transition hover:opacity-100"
+          >
+            ×
+          </button>
+        </div>
+      )}
     </main>
   );
 }

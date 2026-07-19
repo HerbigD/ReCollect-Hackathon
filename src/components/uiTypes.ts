@@ -22,3 +22,10 @@ export interface TransformResponse {
   retrieved: RetrievedPreview[];
   result: TransformResult;
 }
+
+export interface SyncResponse {
+  added: number;
+  updated: number;
+  removed: number;
+  total: number;
+}
