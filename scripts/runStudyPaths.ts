@@ -7,12 +7,13 @@ async function main() {
   }
   const { runStudyPath } = await import("@/transformers/studyPath");
 
-  for (const topic of ["AI agents", "酒", "网球"]) {
+  for (const topic of ["AI agents", "journaling", "bar"]) {
     const output = await runStudyPath(topic, 12);
     console.log(JSON.stringify({
       topic,
-      retrieved: output.retrieved.map(({ item, similarity }) => ({ title: item.title, url: item.url, similarity })),
-      result: output.result,
+      format: output.result.format,
+      title: output.result.title,
+      firstSection: output.result.sections[0],
     }, null, 2));
   }
 }

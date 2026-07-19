@@ -1,10 +1,10 @@
-import { generateStudyPath } from "@/ai/gpt";
+import { generateAdaptiveArtifact } from "@/ai/gpt";
 import { retrieve } from "@/pipeline/retrieve";
 import type { Transformer } from "@/transformers/base";
 
 export const studyPathTransformer: Transformer = {
   key: "studyPath",
-  run: (topic, items, options) => generateStudyPath(topic, items, options?.outputLanguage),
+  run: (topic, items, options) => generateAdaptiveArtifact(topic, items, options?.outputLanguage),
 };
 
 export async function runStudyPath(topic: string, k = 12, outputLanguage = "English") {

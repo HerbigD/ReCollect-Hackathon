@@ -15,6 +15,7 @@ export interface SavedItem {
 }
 
 export interface TransformResult {
+  format?: string;
   title: string;
   sections: Array<{
     heading: string;
