@@ -3,7 +3,9 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CollectionCard } from "@/components/CollectionCard";
+import { EmptyCollectionWelcome } from "@/components/EmptyCollectionWelcome";
 import { OutputPanel } from "@/components/OutputPanel";
+import { SyncToast, type SyncToastMessage } from "@/components/SyncToast";
 import type { CollectionPreview, SyncResponse, TransformResponse } from "@/components/uiTypes";
 
 const suggestions = ["AI agents", "gin & cocktails", "tennis"];
@@ -13,7 +15,7 @@ export function ReCollectApp({ items }: { items: CollectionPreview[] }) {
   const [topic, setTopic] = useState("");
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [syncToast, setSyncToast] = useState<{ kind: "success" | "error"; message: string }>();
+  const [syncToast, setSyncToast] = useState<SyncToastMessage>();
   const [error, setError] = useState<string>();
   const [output, setOutput] = useState<TransformResponse>();
   const outputRef = useRef<HTMLDivElement>(null);
@@ -25,7 +27,7 @@ export function ReCollectApp({ items }: { items: CollectionPreview[] }) {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
   }, []);
 
-  function showSyncToast(toast: { kind: "success" | "error"; message: string }) {
+  function showSyncToast(toast: SyncToastMessage) {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setSyncToast(toast);
     toastTimerRef.current = setTimeout(() => setSyncToast(undefined), 5_000);
@@ -80,6 +82,17 @@ export function ReCollectApp({ items }: { items: CollectionPreview[] }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (items.length === 0) {
+    return (
+      <EmptyCollectionWelcome
+        syncing={syncing}
+        onSync={syncSaves}
+        toast={syncToast}
+        onDismissToast={() => setSyncToast(undefined)}
+      />
+    );
   }
 
   return (
@@ -187,30 +200,7 @@ export function ReCollectApp({ items }: { items: CollectionPreview[] }) {
         </section>
       </div>
 
-      {syncToast && (
-        <div
-          role={syncToast.kind === "error" ? "alert" : "status"}
-          aria-live="polite"
-          className={`fixed right-4 top-4 z-50 flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-2xl border px-4 py-3 text-sm font-bold shadow-2xl backdrop-blur sm:right-8 sm:top-6 ${
-            syncToast.kind === "success"
-              ? "border-emerald-200 bg-emerald-950/95 text-emerald-50 shadow-emerald-950/20"
-              : "border-rose-200 bg-rose-950/95 text-rose-50 shadow-rose-950/20"
-          }`}
-        >
-          <span className={`grid size-6 shrink-0 place-items-center rounded-full text-xs ${syncToast.kind === "success" ? "bg-emerald-400 text-emerald-950" : "bg-rose-400 text-rose-950"}`}>
-            {syncToast.kind === "success" ? "✓" : "!"}
-          </span>
-          <span>{syncToast.message}</span>
-          <button
-            type="button"
-            onClick={() => setSyncToast(undefined)}
-            aria-label="Dismiss notification"
-            className="ml-1 text-lg leading-none opacity-60 transition hover:opacity-100"
-          >
-            ×
-          </button>
-        </div>
-      )}
+      <SyncToast toast={syncToast} onDismiss={() => setSyncToast(undefined)} />
     </main>
   );
 }
